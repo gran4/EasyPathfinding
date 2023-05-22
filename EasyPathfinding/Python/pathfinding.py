@@ -9,6 +9,9 @@ __all__ = (
 
 def AStarSearch(Map:LivingMap, start:tuple, end:tuple, allow_diagonal_movement:bool=True, movelist=[], min_dist=0):
     tilesize = Map.tilesize
+    length = Map.length
+    height = Map.height
+
     start = (int(start[0]/tilesize), int(start[1]/tilesize))
     end = (int(end[0]/tilesize), int(end[1]/tilesize))
 
@@ -46,7 +49,7 @@ def AStarSearch(Map:LivingMap, start:tuple, end:tuple, allow_diagonal_movement:b
                 current = pos
 
         # Check if we have reached the goal
-        dist = get_dist(current, end)*50
+        dist = get_dist(current, end)*tilesize
         if dist <= min_dist:
             # Retrace our route backward
             path = [[current[0]*tilesize, current[1]*tilesize]]
@@ -95,6 +98,9 @@ def AStarSearch(Map:LivingMap, start:tuple, end:tuple, allow_diagonal_movement:b
 
 def SearchTilesAround(Map:LivingMap, start:tuple, allow_diagonal_movement:bool=True, movelist=[]):
     tilesize = Map.tilesize
+    length = Map.length
+    height = Map.height
+
     start = (int(start[0]/tilesize), int(start[1]/tilesize))
 
     graph = Map.graph
@@ -125,7 +131,7 @@ def SearchTilesAround(Map:LivingMap, start:tuple, allow_diagonal_movement:bool=T
 
         # Update scores for vertices near the current position
         for neighbour in neighbours:
-            if neighbour[0] < 0 or neighbour[1] < 0 or neighbour[0] >= 100 or neighbour[1] >= 100:
+            if neighbour[0] < 0 or neighbour[1] < 0 or neighbour[0] >= length or neighbour[1] >= height:
                 continue
 
             if not graph[neighbour[0]][neighbour[1]] in movelist:
@@ -145,6 +151,9 @@ def SearchTilesAround(Map:LivingMap, start:tuple, allow_diagonal_movement:bool=T
 
 def AStarWDict(Map:BarrierDict, start:tuple, end:tuple, allow_diagonal_movement:bool=True, movelist=[], min_dist=0):
     tilesize = Map.tilesize
+    length = Map.length
+    height = Map.height
+
     start = (int(start[0]/tilesize), int(start[1]/tilesize))
     end = (int(end[0]/tilesize), int(end[1]/tilesize))
 
@@ -205,7 +214,7 @@ def AStarWDict(Map:BarrierDict, start:tuple, end:tuple, allow_diagonal_movement:
         for neighbour in neighbours:
             if neighbour in closed_vertices:
                 continue  # We have already processed this node exhaustively
-            elif neighbour[0] < 0 or neighbour[1] < 0 or neighbour[0] >= 100 or neighbour[1] >= 100:
+            elif neighbour[0] < 0 or neighbour[1] < 0 or neighbour[0] >= length or neighbour[1] >= height:
                 continue
 
             if not graph[neighbour[0]][neighbour[1]] in movelist:
@@ -231,6 +240,9 @@ def AStarWDict(Map:BarrierDict, start:tuple, end:tuple, allow_diagonal_movement:
 
 def SearchAroundWDict(Map:BarrierDict, start:tuple, allow_diagonal_movement:bool=True, movelist=[]):
     tilesize = Map.tilesize
+    length = Map.length
+    height = Map.height
+
     start = (int(start[0]/tilesize), int(start[1]/tilesize))
 
     graph = Map.barrier_dict
@@ -261,7 +273,7 @@ def SearchAroundWDict(Map:BarrierDict, start:tuple, allow_diagonal_movement:bool
 
         # Update scores for vertices near the current position
         for neighbour in neighbours:
-            if neighbour[0] < 0 or neighbour[1] < 0 or neighbour[0] >= 100 or neighbour[1] >= 100:
+            if neighbour[0] < 0 or neighbour[1] < 0 or neighbour[0] >= length or neighbour[1] >= hegiht:
                 continue
 
             if not graph[neighbour[0]][neighbour[1]] in movelist:
