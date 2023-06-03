@@ -1,11 +1,16 @@
-from types import Point
+from __future__ import annotations
+
+from customtypes import Point, BarrierType
 from typing import Union, Optional, List
+from pathfindingfuncs import *
 
 
 __all__ = (
     "CustomList",
-    "LivingMap"
-    "BarrierDict"
+    "LivingMap",
+    "BarrierObject",
+    "BarrierDict",
+    "LayeredBarrierDict"
 )
 
 
@@ -15,6 +20,7 @@ class CustomList(list):
     """
     def __setitem__(self, index, item):
         super().__setitem__(int(index), int(item))
+
     def __getitem__(self, __name):
         return super().__getitem__(int(__name))
 
@@ -26,12 +32,16 @@ class LivingMap(object):
         "size",
         "tilesize",
         "graph",
+        "length",
+        "height",
         "__weakref__"
     )
 
-    def __init__(self, x_length:int, y_length:int,  
-                    size:int, *args, tilesize:int=50
+    def __init__(self, x_length: int, y_length: int,  
+                    size: int, *args, tilesize: int=50
                     ) -> None:
+        self.length = x_length
+        self.height = y_length
         self.size = size
         self.tilesize = tilesize
 
@@ -49,23 +59,17 @@ class LivingMap(object):
                 self.graph[x][y] = count
             count += 1
 
-    def change(self, x:int, y:int, barrier:bool) -> None:
+    def change(self, x:int, y:int, barrier: int) -> None:
         x = int(x/50)
         y = int(y/50)
 
-        if barrier:
-            self.graph[x][y] = 1
-        else:
-            self.graph[x][y] = 0
+        self.graph[x][y] = barrier
 
     def __getitem__(self, i):
         return self.graph[i]
 
     def __setitem__(self, x, y, val):
-        self.graph[x][y] = val
-
-
-
+        self.graph[x/self.tilesize][y/self.tilesize] = val
 
 class ObservablePoint(list):
     """
@@ -73,6 +77,7 @@ class ObservablePoint(list):
 
     Use when you use AStarBarrierDict
     """
+    __slots__ = ("changed")
     def __setitem__(self, index, item):
         self.changed = True
         super().__setitem__(int(index), int(item))
@@ -82,45 +87,63 @@ class ObservablePoint(list):
         return 2
 
 class BarrierObject:
-    def __init__(self, barrier, layer=0, bellow: List[Sprite] = []):
-        self.barrier = barrier
+    __slots__ = (
+        "barrier",
+        "bellow",
+        "layer",
+        "base"
+    )
+    def __init__(self, layer=0, bellow: List[Point] = [], base = None):
+        self.barrier = base
         self.bellow = bellow
         self.layer = layer
+        self.base = base
     def get_bellow(self):
         if not self.bellow:
-            return None
+            return self.base
         self.barrier = self.bellow.pop()
         return self.barrier
     def push(self, barrier):
         if self.barrier:
             self.bellow.append(self.barrier)
         self.barrier = barrier
-    def remove_top():
+    def remove_top(self):
         obj = self.barrier
         self.barrier = self.bellow.pop()
         return obj
-    def remove(barrier):
+    def remove(self, barrier):
         if not barrier in self.layers:
-            return None
+            return self.base
         self.layers.remove(barrier)
     def __eq__(self, other: BarrierObject) -> bool:
         return self.layer == other.layer
 
-
 class BarrierDict:
     """
-    Class that manages a dict of barriers 
-    that can be encountered during
-    A* path finding.
+    Class that manages a dict of barriers
+    that can be encountered during A* path finding.
+    Accessing elements is much faster, but start is slower.
     """
+    __slots__ = (
+        "tilesize",
+        "bottom",
+        "left",
+        "right",
+        "top",
+        "length",
+        "height",
+        "static_barriers",
+        "moving_barriers",
+        "barrier_dict"
+    )
     def __init__(self,
-                 blocking_sprites: Point,
                  tilesize: int,
                  left: int,
                  right: int,
                  bottom: int,
                  top: int,
                  moving_barriers: Optional[List[Point]] = None,
+                 base = None
                  ):
         """
         :param Sprite moving_sprite: Sprite that will be moving
@@ -141,9 +164,9 @@ class BarrierDict:
         self.length = int(self.top - self.bottom)
         self.height = int(self.right - self.left)
 
-        self.static_barriers = blocking_sprites
         self.moving_barriers = moving_barriers
         self.barrier_dict = {}
+        self.base = base
 
         self.set_up_dict()
 
@@ -151,67 +174,60 @@ class BarrierDict:
         for cx in range(self.left, self.right + 1):
             self.barrier_dict[cx] = {}
             for cy in range(self.bottom, self.top + 1):
-                self.barrier_dict[cx][cy] = BarrierObject(None)
-        for barrier in self.static_barriers:
-            x, y = _collapse(barrier.position, self.tilesize)
-            self.barrier_dict[x][y].push(barrier)
+                self.barrier_dict[cx][cy] = self.base
         for barrier in self.moving_barriers:
-            x, y = _collapse(barrier.position, self.tilesize)
-            self.barrier_dict[x][y].push(barrier)
+            x, y = collapse(barrier.position, self.tilesize)
+            self.barrier_dict[x][y] = barrier
 
     def recalculate(self):
-        for barrier in self.static_barriers:
-            x, y = _collapse(barrier.position, self.tilesize)
-            self.barrier_dict[x][y].barrier = barrier
         for barrier in self.moving_barriers:
-            x, y = _collapse(barrier.position, self.tilesize)
-            self.barrier_dict[x][y].barrier = barrier
+            if not barrier.moved:
+                continue
+            x, y = collapse(barrier.position, self.tilesize)
+            self.barrier_dict[x][y] = barrier
 
-    def recalculate_moving():
+    def recalculate_moving(self):
         for barrier in self.moving_barriers:
-            x, y = _collapse(barrier.position, self.tilesize)
-            self.barrier_dict[x][y].barrier = barrier
+            x, y = collapse(barrier.position, self.tilesize)
+            self.barrier_dict[x][y] = barrier
 
-    def add_static_barrier(self, barrier):
-        self.static_barriers.append(barrier)
-        x, y = _collapse(barrier.position, self.tilesize)
-        self.barrier_dict[x][y].barrier = barrier
-    
-    def add_moving_barrier(self, barrier):
+    def add(self, barrier):
         self.moving_barriers.append(barrier)
-        x, y = _collapse(barrier.position, self.tilesize)
-        self.barrier_dict[x][y].barrier = barrier
-    
-    def remove_static(self, barrier = Union[int, Point]):
-        if isinstance(barrier, int):
-            return self.static_barriers.pop(int)
-        elif isinstance(barrier, Point):
-            temp = self.barrier_dict[barrier[0]][barrier[1]]
-            self.barrier_dict[barrier[0]][barrier[1]] = None
-            return temp
+        x, y = collapse(barrier.position, self.tilesize)
+        self.barrier_dict[x][y] = barrier
 
-    def remove_moving(self, index: Union[int, Point]):
+    def remove(self, barrier: Union[int, Point]):
         if isinstance(barrier, int):
             return self.moving_barriers.pop(int)
         elif isinstance(barrier, Point):
             temp = self.barrier_dict[barrier[0]][barrier[1]]
-            self.barrier_dict[barrier[0]][barrier[1]] = None
+            self.barrier_dict[barrier[0]][barrier[1]] = self.base
             return temp
 
-class LayeredBarrierDict:
+class LayeredBarrierDict(BarrierDict):
     """
-    Class that manages a dict of barriers 
-    that can be encountered during
-    A* path finding.
+    Subtly different from `BarrierDict`, same idea but uses `Barrier`
+    objects. Instead, barriers can be over each other,
+    only the one on top takes precedence.
+
+    ... Example:
+        Earth bellow floor bellow walls
+        
+        something that goes through this tile has to go through the wall,
+        thus, ensuring that tiles bellow are save so when the walls are broken,
+        there is the floor underneath(only certian things can go on the floor),
+        then when the floor breaks, it is dirt(self.base).
+        NOTE: (This can also be used for diff speeds on diff substance)
     """
+
     def __init__(self,
-                 blocking_sprites: Point,
                  tilesize: int,
                  left: int,
                  right: int,
                  bottom: int,
                  top: int,
                  moving_barriers: Optional[List[Point]] = None,
+                 base = None
                  ):
         """
         :param Sprite moving_sprite: Sprite that will be moving
@@ -222,96 +238,41 @@ class LayeredBarrierDict:
         :param int bottom: Bottom of playing field
         :param int top: Top of playing field
         """
-
-        self.tilesize = tilesize
-        self.bottom = int(bottom // tilesize)
-        self.top = int(top // tilesize)
-        self.left = int(left // tilesize)
-        self.right = int(right // tilesize)
-
-        self.length = int(self.top - self.bottom)
-        self.height = int(self.right - self.left)
-
-        self.static_barriers = blocking_sprites
-        self.moving_barriers = moving_barriers
-        self.barrier_dict = {}
-
-        self.set_up_dict()
+        super().__init__(
+            tilesize, left, right, bottom,
+            top, moving_barriers=moving_barriers, base=base
+        )
 
     def set_up_dict(self):
         for cx in range(self.left, self.right + 1):
             self.barrier_dict[cx] = {}
             for cy in range(self.bottom, self.top + 1):
-                self.barrier_dict[cx][cy] = BarrierObject(None)
-        for barrier in self.static_barriers:
-            x, y = _collapse(barrier.position, self.tilesize)
-            self.barrier_dict[x][y].push(barrier)
+                self.barrier_dict[cx][cy] = BarrierObject(self.base)
         for barrier in self.moving_barriers:
-            x, y = _collapse(barrier.position, self.tilesize)
+            x, y = collapse(barrier.position, self.tilesize)
             self.barrier_dict[x][y].push(barrier)
 
     def recalculate(self):
-        for barrier in self.static_barriers:
-            x, y = _collapse(barrier.position, self.tilesize)
-            self.barrier_dict[x][y].barrier = barrier
         for barrier in self.moving_barriers:
-            x, y = _collapse(barrier.position, self.tilesize)
+            if not barrier.moved:
+                continue
+            x, y = collapse(barrier.position, self.tilesize)
             self.barrier_dict[x][y].barrier = barrier
 
-    def recalculate_moving():
-        for barrier in self.moving_barriers:
-            x, y = _collapse(barrier.position, self.tilesize)
-            self.barrier_dict[x][y].barrier = barrier
-
-    def add_static_barrier(self, barrier):
-        self.static_barriers.append(barrier)
-        x, y = _collapse(barrier.position, self.tilesize)
-        self.barrier_dict[x][y].barrier = barrier
-    
-    def add_moving_barrier(self, barrier):
+    def add(self, barrier):
         self.moving_barriers.append(barrier)
-        x, y = _collapse(barrier.position, self.tilesize)
-        self.barrier_dict[x][y].barrier = barrier
-    
-    def remove_static(self, barrier = Union[int, Point, "Any barrier"]):
+        x, y = collapse(barrier.position, self.tilesize)
+        self.barrier_dict[x][y].push(barrier)
+
+    def remove(self, barrier: Union[int, Point, BarrierType]):
         if isinstance(barrier, int):
-            return self.static_barriers.pop(int)
+            barrier = self.moving_barriers.pop(int)
+            self.barrier_dict[barrier.center_x][barrier.center_y]
+            return barrier
         elif isinstance(barrier, Point):
             return self.barrier_dict[barrier[0]][barrier[1]].remove_top()
         else:
-            return self.barrier_dict[barrier[0]][barrier[1]].remove(barrier)
-
-    def remove_moving(self, index: Union[int, Point, "Any barrier"]):
-        if isinstance(barrier, int):
-            return self.moving_barriers.pop(int)
-        elif isinstance(barrier, Point):
-            return self.barrier_dict[barrier[0]][barrier[1]].remove_top()
-        else:
-            return self.barrier_dict[barrier[0]][barrier[1]].remove(barrier)
-
-
-# Example usage
-N, M = input().split()
-N, M = int(N), int(M)
-breeds = input()
-
-roads = []
-for i in range(N-1):
-    road = input()
-    start, end = road.split(" ")
-    start, end = int(start), int(end)
-
-friends = []
-for i in range(M):
-    visit = input()
-    start, end, person = visit.split(" ")
-    start, end, person = int(start), int(end), int(person)
-
-
-
-
-print(output)
-
+            return self.barrier_dict[barrier.center_x][barrier.center_y].remove(barrier)
 
 
 #USE Weak refs(arcade as example)
